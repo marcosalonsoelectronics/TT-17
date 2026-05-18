@@ -1,0 +1,149 @@
+* Netlist contains all necessary subcircuits for Marcos Alonso BLDC motor modelling
+* This allow copy and paste this netlist into Qspice to create an embedded subcircuit model
+
+* ********************************************************
+* BLDC motor modelling in LTspice
+* Created by Marcos Alonso, University of Oviedo, Spain
+* marcos@uniovi.es
+* For educational purposes only
+* Last update: May 4, 2022 
+* For information on this library, please visit:
+* https://www.youtube.com/c/MarcosAlonsoElectronics
+**********************************************************
+
+**************************************************************************
+* BLDC motor
+**************************************************************************
+.subckt bldcm pha phb phc tload ea eb ec ha hb hc te w wrpm thetarot nr
+XU1 a b c n thetat N007 hc hb ha bemf
+La N001 N002 {L-M}
+Lb N003 N004 {L-M}
+Lc N005 N006 {L-M}
+Ra N001 pha {R}
+Rb N003 phb {R}
+Rc N005 phc {R}
+XU2 thetarott thetat Gain A={npp}
+XUa N002 a ia isense k=1
+XUb N004 b ib isense k=1
+XUc N006 c ic isense k=1
+XU3 ea ia N008 mul
+XU4 eb ib N009 mul
+XU5 ec ic N017 mul
+XU6 N008 N009 N017 Pe Adder3
+XU7 Pe w Te div eps=1e-6
+XU8 Te N016 N010 Sub2
+XU9 N010 Tload N011 Sub2
+XU10 N016 Constant K={To}
+XU13 N011 N015 N012 div eps=0
+XU14 N015 Constant K={J}
+XU11 N012 N013 Integ ic=0
+XU12 N018 thetarott N019 mul
+XU15 N018 Constant K={Bv/J}
+XU16 N013 N019 N014 Sub2
+XU18 w N007 Gain A={Kv}
+XU21 w wrpm Gain A=60/(2*pi)
+XU22 a n ea Sub2
+XU23 b n eb Sub2
+XU24 c n ec Sub2
+XU17 w thetarott Integ ic=0
+XU29 N014 w abs k=1
+E1 nr 0 value={ floor( V(thetarott)/(2*pi) )}
+Rin1 nr 0 10Meg
+E2 thetarot 0 value={ ( V(thetarott)/(2*pi) - V(nr) )*2*pi}
+Rin2 thetarot 0 10Meg
+.ends bldcm
+
+********************************************************************************************************
+* Subcircuit to generate BLDCM back emfs and hall sensor outputs
+********************************************************************************************************
+.subckt bemf a b c n thetat amp hc hb ha
+Ea a N value= {if(V(theta)<pi/6, V(amp)*V(theta)/(pi/6),if(V(theta)<5*pi/6, V(amp), 
++ if(V(theta)<7*pi/6, V(amp)-V(amp)*(V(theta)-5*pi/6)/(pi/6), if( V(theta)<11*pi/6, -V(amp), 
++ if(V(theta)<2*pi, -V(amp) + V(amp)*(V(theta)-11*pi/6)/(pi/6),0) ) ) ) )}
+Eb b N value={if(V(theta)<pi/2, -V(amp), if( V(theta)< 5*pi/6, -V(amp)+V(amp)*(V(theta)-3*pi/6)/(pi/6), 
++ if( V(theta)<9*pi/6, V(amp), if(V(theta)<11*pi/6, V(amp)-V(amp)*(V(theta)-9*pi/6)/(pi/6), 
++ if( V(theta)<2*pi, -V(amp), 0 ) ) ) ) )}
+Ec c N value={if(V(theta)<pi/6, V(amp), if( V(theta)<3*pi/6, V(amp)-V(amp)*(V(theta)-pi/6)/(pi/6), 
++ if(V(theta)<7*pi/6, -V(amp), if(V(theta)<9*pi/6, -V(amp)+V(amp)*(V(theta)-7*pi/6)/(pi/6), 
++ if( V(theta)<2*pi, V(amp), 0 ) ) ) ) ) }
+XUhc 0 ca hc comp Vhigh=5 Vlow=0
+Eca ca 0 value={V(c)-V(a)}
+XUhb 0 ab hb comp Vhigh=5 Vlow=0
+Eab ab 0 value={V(a)-V(b)}
+XUha bc 0 ha comp Vhigh=5 Vlow=0
+Ebc bc 0 value={V(b)-V(c)}
+Rin1 thetat 0 10Meg
+Rin2 amp 0 10Meg
+E1 theta 0 value={ ( V(thetat)/(2*pi) - floor( V(thetat)/(2*pi) ) )*2*pi}
+Rin4 theta 0 10Meg
+.ends bemf
+
+* ********************************************************
+* Control library for LTspice (selected subcircuit by KSKelvin)
+* Created by Marcos Alonso, University of Oviedo, Spain
+* marcos@uniovi.es
+* For educational purposes only
+* Last update: December 22, 2023
+* For information on this library, please visit:
+* https://www.youtube.com/c/MarcosAlonsoElectronics
+**********************************************************
+
+.subckt Gain in out
+E1 out 0 value={A*v(in)}
+Rin in 0 10Meg
+.ends Gain
+
+.subckt isense in+ in- out
+V1 in+ in- 0
+E1 out 0 value = {k*i(V1)}
+.ends isense
+
+.subckt Mul in1 in2 out
+E1 out 0 value = {V(in1)*V(in2)}
+Rin1 in1 0 10Meg
+Rin2 in2 0 10Meg
+.ends Mul
+
+.subckt Adder3 in1 in2 in3 out
+E1 out 0 value={v(in1)+v(in2)+v(in3)}
+Rin1 in1 0 10Meg
+Rin2 in2 0 10Meg
+Rin3 in3 0 10Meg
+.ends Adder3
+
+.subckt Div in1 in2 out
+E1 out 0 value = {V(in1)/( V(in2) + eps)}
+Rin1 in1 0 10Meg
+Rin2 in2 0 10Meg
+.ends Div
+
+.subckt Constant out
+E1 out 0 value={K}
+.ends Constant
+
+.subckt Integ in out
+E1 in1 0 value={v(in)}
+E2 out 0 value={i(L1)}
+L1 ind 0 1
+R1 ind in1 1n
+Rin in 0 10Meg
+.ic i(L1) {ic}
+.ends Integ
+
+.subckt Sub2 in1 in2 out
+E1 out 0 value={v(in1)-v(in2)}
+Rin1 in1 0 10Meg
+Rin2 in2 0 10Meg
+.ends Sub2
+
+.subckt abs in out
+E1 out 0 value = {k*abs(V(in))}
+Rin in 0 10Meg
+.ends abs
+
+.subckt comp in+ in- out
+E1 out 0 value = {if(V(in+, in-)>0, {Vhigh}, {Vlow})}
+Rin+ in+ 0 10Meg
+Rin- in- 0 10Meg
+Rin  in+ in- 1Meg
+.ends comp
